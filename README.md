@@ -225,5 +225,3 @@ outputs/ztests_TEAM.csv
 
 - `dataPull.py` must be run before anything else for a new game.  
 - `probabilities.py` must run before `teamZ.py` or `allZ.py`.  
-- HMM states are re-labeled so that **state 0 = HOT** (highest P(score)).  
-- Strong diagonal transition probabilities in the HMM imply **momentum persistence**.
