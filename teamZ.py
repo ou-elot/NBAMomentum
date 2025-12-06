@@ -1,20 +1,4 @@
 #!/usr/bin/env python3
-"""
-team_ztest_vs_raw.py
-
-Two-proportion z-tests for a TEAM, comparing:
-    P(result = to | previous result = from)
-vs
-    raw/unconditional P(result = to)
-
-across ALL games you specify.
-
-This reuses the <GAME_ID>_outputs/<GAME_ID>_cond_probs.csv files
-produced by probabilities.probs_for_game(game_id).
-
-It does NOT touch your HMM pipeline; you still run specificTeam.py
-for the HMM.
-"""
 
 import os
 import math
@@ -23,8 +7,6 @@ import pandas as pd
 
 STATES = ["score", "no_score", "turnover"]
 
-
-# ---------- basic stats helpers ----------
 
 def phi_cdf(z: float) -> float:
     return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
@@ -61,8 +43,6 @@ def two_prop_z_test(x1: int, n1: int, x2: int, n2: int):
     p_two = 2 * (1 - phi_cdf(abs(z)))
     return (p1, p2, z, p_two)
 
-
-# ---------- load / aggregate cond_probs ----------
 
 def load_cond_for_game(game_id: str) -> pd.DataFrame:
     """
@@ -112,9 +92,6 @@ def aggregate_counts(game_ids, team_filter=None) -> pd.DataFrame:
     agg = agg.groupby(["team", "from", "to"], as_index=False)["count"].sum()
     return agg
 
-
-# ---------- core: z-tests conditional vs raw for one team ----------
-
 def ztests_vs_raw_for_team(agg_counts: pd.DataFrame, team: str) -> pd.DataFrame:
     """
     For a single team, compute for all from,to:
@@ -128,7 +105,7 @@ def ztests_vs_raw_for_team(agg_counts: pd.DataFrame, team: str) -> pd.DataFrame:
     if team_counts.empty:
         return pd.DataFrame()
 
-    # Ensure full 3x3 grid exists
+
     idx = pd.MultiIndex.from_product([[team], STATES, STATES],
                                      names=["team", "from", "to"])
     team_counts = (
@@ -138,21 +115,18 @@ def ztests_vs_raw_for_team(agg_counts: pd.DataFrame, team: str) -> pd.DataFrame:
         .reset_index()
     )
 
-    # Totals per 'from' (denominator for conditional probs)
+
     n_from = team_counts.groupby("from")["count"].sum().to_dict()
 
-    # Totals per 'to' and overall (denominator for raw probs)
     total_transitions = int(team_counts["count"].sum())
     to_totals = team_counts.groupby("to")["count"].sum().to_dict()
 
     rows = []
     for to_state in STATES:
-        # raw/unconditional group for this destination
         x2 = to_totals.get(to_state, 0)
         n2 = total_transitions
 
         for from_state in STATES:
-            # conditional group: from_state -> to_state
             mask = (team_counts["from"] == from_state) & (team_counts["to"] == to_state)
             x1 = int(team_counts.loc[mask, "count"].sum())
             n1 = int(n_from.get(from_state, 0))
@@ -201,10 +175,8 @@ def run(game_ids, team=None, save_path=None) -> pd.DataFrame:
 
     out = pd.concat(frames, ignore_index=True)
 
-    # print to console
     print(out.to_string(index=False))
 
-    # optional save
     if save_path:
         os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
         out.to_csv(save_path, index=False)
@@ -254,3 +226,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
