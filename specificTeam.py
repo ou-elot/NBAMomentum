@@ -1,19 +1,4 @@
-# TeamPipeline.py
-#
-# Usage:
-#   python TeamPipeline.py SAC 2024-25
-#   python TeamPipeline.py LAL          # season defaults to 2024-25
-#
-# This script:
-#   - For a given team + season:
-#       * finds all game_ids using nba_api
-#       * for each game:
-#           - runs dataPull.save_possessions_csv(game_id)
-#           - runs probabilities.probs_for_game(game_id)
-#           - fits a 3-state HMM (HOT / NEUTRAL / COLD) using MomentumHMM.DiscreteHMM
-#             on that team's S/0/T sequence for that game
-#       * aggregates HMM transitions (within-game only, no cross-game links)
-#       * prints and saves the transition matrix to CSV
+
 
 import os
 import sys
@@ -27,7 +12,6 @@ from dataPull import save_possessions_csv
 from probabilities import probs_for_game
 from MomentumHMM import DiscreteHMM, encode_events
 
-# Map TEAM_ABBR -> TEAM_ID (matches what you used in dataPull)
 TEAM_ABBR_TO_ID = {
     "ATL": 1610612737, "BOS": 1610612738, "CLE": 1610612739, "NOP": 1610612740,
     "CHI": 1610612741, "DAL": 1610612742, "DEN": 1610612743, "GSW": 1610612744,
@@ -65,30 +49,17 @@ def get_team_game_ids(team_abbr: str,
 def train_hmm_for_game_team(game_id: str,
                             team_abbr: str,
                             seed: int = 0) -> list:
-    """
-    For one game + one team:
-      - ensure possessions & S/0/T data exist (dataPull.save_possessions_csv)
-      - ensure raw + conditional probs exist (probabilities.probs_for_game)
-      - read that team's S/0/T sequence and fit a 3-state HMM
-      - return the Viterbi path (list of int states in {0,1,2})
-
-    States are relabeled so:
-      0 = HOT, 1 = NEUTRAL, 2 = COLD  (by descending P(S|state)).
-    """
     team_abbr = team_abbr.upper()
 
-    # 1) Make sure game outputs exist (possessions + S/0/T)
     print(f"  [dataPull] pulling possessions for game {game_id} ...")
     save_possessions_csv(game_id)
 
     out_dir = f"{game_id}_outputs"
     os.makedirs(out_dir, exist_ok=True)
 
-    # 2) Make sure raw & conditional probs exist
     print(f"  [probs] computing raw + conditional probs for {game_id} ...")
     probs_for_game(game_id)
 
-    # 3) Locate this team's S/0/T sequence file
     seq_pattern = os.path.join(out_dir, f"{game_id}_{team_abbr}_sequence.txt")
     matches = glob.glob(seq_pattern)
     if not matches:
@@ -99,7 +70,6 @@ def train_hmm_for_game_team(game_id: str,
     seq_path = matches[0]
     print(f"  [HMM] using sequence file: {seq_path}")
 
-    # 4) Read S/0/T characters
     with open(seq_path, "r") as f:
         text = f.read()
     events = [ch for ch in text if ch in ("S", "0", "T")]
@@ -109,10 +79,10 @@ def train_hmm_for_game_team(game_id: str,
 
     obs = encode_events(events)
 
-    # 5) Build & train 3-state HMM (same initialization logic as MomentumHMM main)
     K = 3
     M = 3  # S, 0, T
 
+    #assumption: team that are hot stay hot and teams that are cold stay cold
     A0 = np.array(
         [
             [0.85, 0.10, 0.05],  # HOT
@@ -157,10 +127,6 @@ def train_hmm_for_game_team(game_id: str,
 
 def accumulate_hmm_transitions(v_paths: list,
                                n_states: int = 3):
-    """
-    Given a list of Viterbi paths (one per game), aggregate transition counts
-    WITHOUT linking the end of one game to the start of the next.
-    """
     counts = np.zeros((n_states, n_states), dtype=int)
     total_possessions = 0
 
@@ -172,7 +138,6 @@ def accumulate_hmm_transitions(v_paths: list,
             i, j = path[t], path[t + 1]
             counts[i, j] += 1
 
-    # Row-normalize to get probabilities
     probs = counts.astype(float)
     row_sums = probs.sum(axis=1, keepdims=True)
     row_sums[row_sums == 0] = 1.0  # avoid divide-by-zero
@@ -232,7 +197,6 @@ def main():
 
     labels = ["HOT", "NEUTRAL", "COLD"]
 
-    # Pretty-print transition counts
     print("\n=== HMM transition counts (from -> to) ===")
     header = "from\\to   " + "  ".join(f"{lab:>8}" for lab in labels)
     print(header)
@@ -240,7 +204,6 @@ def main():
         row = "  ".join(f"{counts[i, j]:8d}" for j in range(3))
         print(f"{lab_from:>8}  {row}")
 
-    # Pretty-print transition probabilities
     print("\n=== HMM transition probabilities (from -> to) ===")
     print(header)
     for i, lab_from in enumerate(labels):
@@ -249,7 +212,6 @@ def main():
 
     print(f"\nTotal possessions used for {team_abbr} across all games: {total_possessions}")
 
-    # Save to CSV
     out_name = f"{team_abbr}_{season.replace('-', '')}_HMM_transitions.csv"
     import csv
     with open(out_name, "w", newline="") as f:
@@ -264,3 +226,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
