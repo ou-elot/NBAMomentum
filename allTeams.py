@@ -1,24 +1,4 @@
 #!/usr/bin/env python3
-"""
-allTeams.py
-
-For each NBA team:
-  - Get all game_ids for the season.
-  - For each game:
-      * Run train_hmm_for_game_team(game_id, team_abbr) to get Viterbi path.
-      * Load that game's possessions CSV from:
-            [game_id]_outputs/[game_id]_[TEAM]_possessions.csv
-        and read the 'result' column (values: 'score', 'no_score', 'turnover').
-  - Aggregate across games to compute:
-      * Empirical Viterbi transition counts + probabilities.
-      * Empirical Viterbi emission counts + probabilities.
-  - Save per-team:
-      TEAM_202425_HMM_transitions.csv
-      TEAM_202425_HMM_emissions.csv
-
-This script does NOT need any saved state files; Viterbi states come
-directly from train_hmm_for_game_team.
-"""
 
 import argparse
 import os
@@ -33,14 +13,11 @@ from specificTeam import (
     train_hmm_for_game_team,
 )
 
-# Hidden-state labels, in index order 0,1,2
 STATE_LABELS = ["HOT", "NEUTRAL", "COLD"]
 
-# Outcome labels from your possessions files: 'result' column
 OUTCOME_LABELS = ["score", "no_score", "turnover"]
 OUTCOME_INDEX = {lab: i for i, lab in enumerate(OUTCOME_LABELS)}
 
-# Tune this if you want more/less parallelism
 MAX_WORKERS = 16
 
 
@@ -68,7 +45,7 @@ def compute_empirical_viterbi_transitions(v_paths, n_states=3):
 
     probs = counts.astype(float)
     row_sums = probs.sum(axis=1, keepdims=True)
-    row_sums[row_sums == 0] = 1.0  # avoid div by zero
+    row_sums[row_sums == 0] = 1.0
     probs /= row_sums
 
     return counts, probs, total_poss
@@ -91,7 +68,6 @@ def compute_empirical_viterbi_emissions(v_paths, outcome_lists, n_states=3):
 
     for path, outs in zip(v_paths, outcome_lists):
         if len(path) != len(outs):
-            # mismatched game, skip
             continue
         for st, out in zip(path, outs):
             if st < 0 or st >= n_states:
@@ -113,11 +89,6 @@ def compute_empirical_viterbi_emissions(v_paths, outcome_lists, n_states=3):
 
 
 def run_for_team(team_abbr: str, season: str):
-    """
-    Run HMM + Viterbi aggregation for a single team.
-
-    Returns team_abbr (for logging).
-    """
     team_abbr = team_abbr.upper()
     print(f"\n======================")
     print(f"TEAM: {team_abbr}, SEASON: {season}")
@@ -274,3 +245,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
