@@ -3,7 +3,6 @@ from pbpstats.client import Client
 import pandas as pd
 import os
 
-# --- Static map: team_id -> abbreviation (30 teams) ---
 TEAM_ID_TO_ABBR = {
     1610612737: "ATL", 1610612738: "BOS", 1610612739: "CLE", 1610612740: "NOP",
     1610612741: "CHI", 1610612742: "DAL", 1610612743: "DEN", 1610612744: "GSW",
@@ -23,14 +22,11 @@ def save_possessions_csv(game_id: str):
     client = Client(settings)
     game = client.Game(game_id)
 
-    # --- Build base table from pbpstats possessions (your original approach) ---
     poss_dicts = [p.data for p in game.possessions.items]
     df = pd.DataFrame(poss_dicts)
 
-    # Event sequence column (list of event class names)
     df["sequence"] = [[type(e).__name__ for e in p.events] for p in game.possessions.items]
 
-    # --- Offense team columns (from possession, then map to abbrev) ---
     offense_ids, offense_abbrevs = [], []
     for p in game.possessions.items:
         oid = getattr(p, "offense_team_id", None) or p.data.get("offense_team_id")
@@ -39,8 +35,6 @@ def save_possessions_csv(game_id: str):
     df["offense_team_id"] = offense_ids
     df["offense_team_abbreviation"] = offense_abbrevs
 
-    # --- 3-way possession result using LAST EVENT ONLY ---
-    # FieldGoal/FreeThrow -> "score"; Turnover -> "turnover"; Rebound/other -> "no_score"
     def classify_result(seq):
         if not seq:
             return "no_score"
@@ -55,7 +49,6 @@ def save_possessions_csv(game_id: str):
 
     df["result"] = df["sequence"].apply(classify_result)
 
-    # --- Rename / reorder exactly like your original flow ---
     rename_map = {
         "offense_team_id": "team_id",
         "offense_team_abbreviation": "team_abbrev",
@@ -79,15 +72,12 @@ def save_possessions_csv(game_id: str):
     df = df[[c for c in preferred_cols if c in df.columns] +
             [c for c in df.columns if c not in preferred_cols]]
 
-    # --- Output directory and files ---
     out_dir = f"{game_id}_outputs"
     os.makedirs(out_dir, exist_ok=True)
 
-    # Combined (all possessions)
     combined_path = os.path.join(out_dir, f"{game_id}_ALL_possessions.csv")
     df.to_csv(combined_path, index=False)
 
-    # 🔹 NEW: combined S/0/T sequence file (all possessions in order)
     combined_outcomes = df["result"].replace({
         "score": "S",
         "no_score": "0",
@@ -98,7 +88,6 @@ def save_possessions_csv(game_id: str):
         f.write("".join(combined_outcomes))
     print(f"Saved ALL sequence file: {combined_txt}")
 
-    # Split by offensive team (one file per team in this game)
     team_ids = [tid for tid in df["team_id"].dropna().unique().tolist() if pd.notna(tid)]
     for tid in team_ids:
         team_df = df[df["team_id"] == tid].reset_index(drop=True)
@@ -108,7 +97,6 @@ def save_possessions_csv(game_id: str):
         team_df.to_csv(path, index=False)
         print(f"Saved team file: {path}")
 
-        # 🔹 NEW: per-team S/0/T sequence
         team_outcomes = team_df["result"].replace({
             "score": "S",
             "no_score": "0",
@@ -121,8 +109,7 @@ def save_possessions_csv(game_id: str):
 
     print(f"Saved combined file: {combined_path}")
 
-# --- example usage ---
-# --- command-line usage ---
+
 if __name__ == "__main__":
     import sys
 
@@ -135,3 +122,4 @@ if __name__ == "__main__":
     for gid in game_ids:
         print(f"\n=== Pulling game {gid} ===")
         save_possessions_csv(gid)
+
