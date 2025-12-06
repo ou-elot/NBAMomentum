@@ -1,8 +1,4 @@
 # z_tests_all.py
-# Usage examples:
-#   python z_tests_all.py 0022400785
-#   python z_tests_all.py 0022400785 0022400786 --team SAC
-#   python z_tests_all.py --auto --save outputs/ztests_all.csv
 
 import os
 import glob
@@ -66,17 +62,14 @@ def ztests_all_to_for_team(agg_counts: pd.DataFrame, team: str) -> pd.DataFrame:
     For one team, compute z-tests for ALL destination states.
     Returns long-form table with one row per (to_state, pair).
     """
-    # ensure full 3x3 grid exists
     team_counts = agg_counts[agg_counts["team"] == team].copy()
     idx = pd.MultiIndex.from_product([[team], STATES, STATES], names=["team","from","to"])
     team_counts = team_counts.set_index(["team","from","to"]).reindex(idx, fill_value=0).reset_index()
 
-    # totals per 'from'
     n_from = team_counts.groupby("from")["count"].sum().to_dict()
 
     rows = []
     for to_state in STATES:
-        # successes per 'from' for this to_state
         succ = team_counts[team_counts["to"] == to_state].set_index("from")["count"].to_dict()
         for a, b in PAIRS:
             x1, n1 = succ.get(a, 0), n_from.get(a, 0)
@@ -103,7 +96,6 @@ def run(game_ids, team=None, save_path=None):
     out = pd.concat(out_frames, ignore_index=True)
     out = out[["team","to","from_a","from_b","x1","n1","p1","x2","n2","p2","z","p_two_sided"]]
 
-    # show
     print(out.to_string(index=False))
 
     if save_path:
@@ -133,3 +125,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
