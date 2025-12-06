@@ -1,8 +1,3 @@
-# analyze_probs.py
-# Usage:
-#   python analyze_probs.py 0022400785
-#   python analyze_probs.py 0022400785 0022400786
-
 import os
 import sys
 import glob
@@ -25,19 +20,12 @@ def raw_possession_probs(csv_path: str) -> dict:
     }
 
 def conditional_probs(csv_path: str) -> pd.DataFrame:
-    """
-    Returns a long-form DataFrame with conditional probabilities and counts:
-    columns: ['from', 'to', 'count', 'P_to_given_from', 'team', 'game_id']
-    """
     df = pd.read_csv(csv_path)
-    # ensure only valid states (in case of stray values)
     df = df[df["result"].isin(STATES)].reset_index(drop=True)
 
-    # Build consecutive pairs within the same team file
     df["next_result"] = df["result"].shift(-1)
     trans = df.dropna(subset=["next_result"]).copy()
 
-    # Count transitions
     counts = (
         trans.groupby(["result", "next_result"])
              .size()
@@ -46,11 +34,9 @@ def conditional_probs(csv_path: str) -> pd.DataFrame:
              .rename(columns={"result": "from", "next_result": "to"})
     )
 
-    # Ensure all 3x3 pairs exist (fill missing with zero)
     idx = pd.MultiIndex.from_product([STATES, STATES], names=["from","to"])
     counts = counts.set_index(["from","to"]).reindex(idx, fill_value=0).reset_index()
 
-    # Row normalize by "from"
     row_totals = counts.groupby("from")["count"].transform("sum").replace(0, 1)
     counts["P_to_given_from"] = counts["count"] / row_totals
 
@@ -68,7 +54,6 @@ def probs_for_game(game_id: str) -> pd.DataFrame:
     if not team_files:
         raise FileNotFoundError(f"No team possession files in {folder}")
 
-    # --------- RAW PROBS (per team) ----------
     raw_rows = []
     for f in sorted(team_files):
         team = os.path.basename(f).split("_")[-2]
@@ -85,7 +70,6 @@ def probs_for_game(game_id: str) -> pd.DataFrame:
     raw_out.to_csv(probs_path, index=False)
     print(f"Saved: {probs_path}")
 
-    # --------- CONDITIONAL PROBS (per team) ----------
     cond_frames = []
     for f in sorted(team_files):
         team = os.path.basename(f).split("_")[-2]
@@ -95,7 +79,6 @@ def probs_for_game(game_id: str) -> pd.DataFrame:
         cond_frames.append(cond)
 
     cond_out = pd.concat(cond_frames, ignore_index=True)
-    # nice column order
     cond_out = cond_out[["game_id","team","from","to","count","P_to_given_from"]]
 
     cond_path = os.path.join(folder, f"{game_id}_cond_probs.csv")
@@ -113,3 +96,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
